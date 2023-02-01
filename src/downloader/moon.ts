@@ -34,7 +34,7 @@ export async function login(browser: BrowserContext, username: string, password:
     await page.type(".field input[type='password']", password);
     await Promise.all([
         page.click(".field input[type='button']"),
-        delay(3000)
+        delay(5000)
     ]);
     let cookies: [string, string][] | null;
     if (page.url() !== "https://moon.vn/")
