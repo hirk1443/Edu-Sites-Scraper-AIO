@@ -12,7 +12,6 @@ import { BrowserContext } from "puppeteer";
 
 type Downloader = {
   website: string;
-  initProxy?: (proxy: Mockttp) => void;
   login: (ctx: BrowserContext, username: string, password: string) => Promise<unknown>;
   logout: (ctx: BrowserContext, pageCtx: unknown) => Promise<void>;
   download: (ctx: BrowserContext, pageCtx: unknown, link: string, output: string) => Promise<void>;
@@ -25,7 +24,6 @@ const filePath = await globby("./downloader/*.js", {
 const downloaders: Downloader[] = await Promise.all(
   filePath.map(path => import(new URL(path, import.meta.url).toString()))
 );
-downloaders.forEach(module => module.initProxy && module.initProxy(proxy));
 loadingSpinner.succeed("Loaded downloaders!");
 
 const config = new Conf();

@@ -4,6 +4,7 @@ import { zip } from "lodash-es";
 import ora from "ora";
 import pMap from "p-map";
 import QuickLRU from "quick-lru"
+import { proxy } from "../proxy.js";
 import { yt_dlp, ffmpeg } from "../tools.js";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -165,6 +166,7 @@ async function downloadVideo(browser: BrowserContext, link: string, output: stri
         }).json<ApiResponse>();
         return res.success ? res.url : ""
     }, { concurrency: 5 }));
+    await page.close();
 
     spinner.text = "Downloading videos using yt-dlp...";
     let video_finished = 0;
@@ -174,7 +176,7 @@ async function downloadVideo(browser: BrowserContext, link: string, output: stri
             "-P", subdir,
             "-o", `${title}.%(ext)s`,
             "--ffmpeg-location", ffmpeg!,
-            "--proxy", "http://127.0.0.1:8080",
+            "--proxy", proxy.url,
             "--no-check-certificates",
             link!
         ], { stdio: "ignore" })
@@ -185,30 +187,23 @@ async function downloadVideo(browser: BrowserContext, link: string, output: stri
     spinner.succeed("Finished!");
 }
 
-export function initProxy(proxy: Mockttp)
-{
-    const idToUrlCache = new QuickLRU<string, string>({ maxSize: 100 });
-    const encryptionKeyCache = new QuickLRU<string, Buffer>({ maxSize: 100 });
-    proxy.forGet(/https:\/\/moonbook\.vn\/video\/AuthenticateLocal/).thenPassThrough({
-        beforeRequest: (req) => {
-            idToUrlCache.set(req.id, req.url);
-            return;
-        },
-        beforeResponse: (res) => {
-            const url = idToUrlCache.get(res.id)!;
-            const cachedKey = encryptionKeyCache.get(url)
-            if (!cachedKey)
-            {
-                encryptionKeyCache.set(url, res.body.buffer);
-                return;
-            }
-            else return {
-                statusCode: 200,
-                body: cachedKey
-            }
+const idToUrlCache = new QuickLRU<string, string>({ maxSize: 100 });
+const encryptionKeyCache = new QuickLRU<string, Buffer>({ maxSize: 100 });
+proxy.forGet(/https:\/\/moonbook\.vn\/video\/AuthenticateLocal/).thenPassThrough({
+    beforeRequest: ({ id, url }) => {
+        idToUrlCache.set(id, url);
+    },
+    beforeResponse: ({ id, body }) => {
+        const url = idToUrlCache.get(id)!;
+        const cachedKey = encryptionKeyCache.get(url)
+        if (!cachedKey)
+            encryptionKeyCache.set(url, body.buffer);
+        else return {
+            statusCode: 200,
+            body: cachedKey
         }
-    });
-}
+    }
+});
 
 export async function download(ctx: BrowserContext, _: never, link: string, output: string)
 {
