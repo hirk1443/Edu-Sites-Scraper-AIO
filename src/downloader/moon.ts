@@ -74,7 +74,7 @@ async function downloadExam(browser: BrowserContext, link: string, output: strin
     await page.waitForSelector(".btn-info:last-of-type", { timeout: 3000 }).then(el => el?.click());
     await page.waitForNetworkIdle();
     const title = await page.$eval(".ask-header p", el => el.textContent!);
-    const subdir = join(output, sanitizePath(title!));
+    const subdir = join(output, sanitizePath(title!.trim()));
     await mkdir(subdir, { recursive: true }).catch(() => {});
     
     const audioLinks = await page.$$eval("div[id^='icecast_']", elems => elems.map(
@@ -164,7 +164,7 @@ async function downloadVideo(browser: BrowserContext, link: string, output: stri
     const title = (await page.waitForSelector(".ask-header p", { timeout: 5000 })
     .then(el => el?.evaluate(el => el.textContent!)))!;
 
-    const subdir = join(output, sanitizePath(title));
+    const subdir = join(output, sanitizePath(title.trim()));
     await mkdir(subdir, { recursive: true }).catch(() => {});
 
     spinner.text = "Getting video titles...";
