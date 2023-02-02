@@ -13,7 +13,6 @@ import { mergeImgVertical } from "./helper/mergeImg.js";
 import { sanitizePath } from "./helper/sanitizePath.js";
 import { toToughCookieJar } from "./helper/toToughCookieJar.js";
 
-import type { Mockttp } from "mockttp";
 import type { BrowserContext, Page, ElementHandle } from "puppeteer";
 
 export const website = "moon.vn";
@@ -78,11 +77,26 @@ async function downloadExam(browser: BrowserContext, link: string, output: strin
     const subdir = join(output, sanitizePath(title!));
     await mkdir(subdir, { recursive: true }).catch(() => {});
     
-    spinner.text = "Downloading audio..."
     const audioLinks = await page.$$eval("div[id^='icecast_']", elems => elems.map(
         // @ts-expect-error
         el => window.flowplayer(el).conf.sources[0].src as string
     ));
+
+    if (audioLinks.length)
+    {
+        let count = 0;
+        spinner.text = "Downloading audio...";
+        await pMap(audioLinks, (link, i) =>
+            execa(yt_dlp, [
+                "-N", "8",
+                "-P", subdir,
+                "-o", `audio${i + 1}.%(ext)s`,
+                "--extract-audio",
+                link!
+            ])
+            .then(() => spinner.text = `Downloading audio... (${++count}/${audioLinks.length})`),
+        { concurrency: 5 });
+    }
 
     spinner.text = "Capturing answer keys...";
     await page.waitForSelector(".table-bordered", { timeout: 3000 })
@@ -179,7 +193,7 @@ async function downloadVideo(browser: BrowserContext, link: string, output: stri
             "--proxy", proxy.url,
             "--no-check-certificates",
             link!
-        ], { stdio: "ignore" })
+        ])
         .then(() =>
             spinner.text = `Downloading videos using yt-dlp... (${++video_finished}/${videoLinks.length})`
         ),
