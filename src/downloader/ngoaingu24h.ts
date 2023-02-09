@@ -2,11 +2,12 @@ import got from "got";
 import ora from "ora";
 import pMap from "p-map";
 import { mkdir, writeFile } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import { join } from "node:path";
 import { sanitizePath } from "./helper/sanitizePath.js";
-import { mergeImgVertical } from "./helper/mergeImg.js";
 
-import type { Browser, BrowserContext, ElementHandle } from "puppeteer";
+import type { Ora } from "ora";
+import { BrowserContext, Page, ElementHandle } from "puppeteer";
 
 export const website = "ngoaingu24h.vn";
 
@@ -14,7 +15,10 @@ export async function login(browser: BrowserContext, username: string, password:
 {
     const page = await browser.newPage();
     await page.goto("https://ngoaingu24h.vn");
-    await page.click(".login_");
+    await page.$eval("#modal-login-v1", el => {
+        el.classList.remove("fade");
+        el.classList.add("show");
+    });
     await page.type("#account-input", username);
     await page.type("#password-input", password);
     await Promise.all([
@@ -30,12 +34,8 @@ export async function login(browser: BrowserContext, username: string, password:
     return cookies;
 }
 
-async function downloadExam(browser: Browser, _: never, link: string, output: string)
+async function downloadExam(page: Page, spinner: Ora, output: string)
 {
-    const spinner = ora("Loading page...").start();
-    const page = await browser.newPage();
-    await page.goto(link);
-
     const title = await page.$eval(".path-panel-style a.active", el => el.textContent!);
     const subdir = join(output, sanitizePath(title));
     await mkdir(subdir, { recursive: true }).catch(() => {});
@@ -49,35 +49,39 @@ async function downloadExam(browser: Browser, _: never, link: string, output: st
         await writeFile(join(subdir, name), content);
     }, { concurrency: 5 });
 
-    await page.$x("//button[contains(text(), 'Xem giải chi tiết')]")
-        .then(elems => (elems[0] as ElementHandle<Element>).click());
-    await page.waitForSelector("#main-game-panel");
+    await page.$eval("#preloader", el => el.remove());
+    await page.waitForXPath("//button[contains(text(), 'Xem giải chi tiết')]")
+        .then(async (elem) => {
+            await delay(1000);
+            await (elem! as ElementHandle<Element>).click()
+        });
+    await page.waitForSelector(".game-content-panel");
 
     spinner.text = "Capturing questions...";
-    const total = await page.$$eval("div[id^='childQuestion-']", elems => elems.length);
     let count = 0;
 
-    const sections = await page.$$("#paragrapmainPanel");
-    for (const section of sections)
+    await page.$eval("#header", el => el.remove());
+    const questions = await page.$$("div[id^='childQuestion-']");
+    const total = questions.length;
+    for (const question of questions)
     {
-        const common = await section.$(".mainParaQuestion").then(el => el!.screenshot());
-        const questions = await section.$$("div[id^='childQuestion-']");
-        for (const question of questions)
-        {
-            ++count;
-            spinner.text = `Capturing questions ${count}/${total} (${(count * 100 / total).toFixed(0)}%)`;
-            const name = await question.evaluate(
-                el => (parseInt(el.id.split("-")[1]) + 1).toString() + ".png"
-            );
-            await mergeImgVertical([
-                common, await question.screenshot()
-            ]).then(img => img.toFile(join(subdir, name)));
-        }
+        ++count;
+        spinner.text = `Capturing questions ${count}/${total} (${(count * 100 / total).toFixed(0)}%)`;
+        const name = await question.evaluate(
+            el => (parseInt(el.id.split("-")[1]) + 1).toString() + ".png"
+        );
+        await question.screenshot({ path: join(subdir, name) })
     }
     spinner.succeed("Finished!");
 }
 
 export async function download(ctx: BrowserContext, _: never, link: string, output: string)
 {
-
+    const spinner = ora("Loading page...").start();
+    const page = await ctx.newPage();
+    await page.setViewport({ width: 1920, height: 1080 });
+    await page.goto(link);
+    if (await page.$("#loxogame"))
+        await downloadExam(page, spinner, output);
+    await page.close();
 }
