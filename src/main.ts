@@ -7,7 +7,6 @@ import prompts from 'prompts';
 import process from 'node:process';
 import { proxy } from "./proxy.js";
 
-import type { Mockttp } from "mockttp";
 import { BrowserContext } from "puppeteer";
 
 type Downloader = {
