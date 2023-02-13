@@ -205,21 +205,7 @@ const machine = createMachine<MachineContext>({
           }
         },
         onDone: "download",
-        onError: {
-          actions: actions.choose([
-            {
-              cond: (_, event) => event.data.message === "User canceled",
-              actions: actions.send("CANCELED")
-            },
-            {
-              actions: actions.send("FAILED")
-            }
-          ])
-        }
-      },
-      on: {
-        CANCELED: { target: "logout" },
-        FAILED: { target: "login" }
+        onError: "logout"
       }
     },
     logout: {
