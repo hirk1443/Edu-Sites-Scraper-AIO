@@ -101,8 +101,12 @@ async function downloadLesson(ctx: BrowserContext, link: string, output: string)
             link
         ]);
         spinner.text = `Downloading video... (${++count}/${playlist.length})`;
-    }, { concurrency: 5, stopOnError: false });
-    spinner.succeed("Finished!");
+    }, { concurrency: 5, stopOnError: false })
+    .then(() => spinner.succeed("Finished!"))
+    .catch(e => {
+        spinner.fail(`Failed to download ${playlist.length - count} video(s)`)
+        throw e;
+    });
 }
 
 async function downloadExam(ctx: BrowserContext, link: string, output: string)
