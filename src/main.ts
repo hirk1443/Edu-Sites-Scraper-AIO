@@ -217,14 +217,14 @@ const machine = createMachine<MachineContext>({
           await downloader!.logout(browserContext!, pageContext).catch(() => {});
           spinner.succeed("Logged out!");
           await browserContext!.close();
+        },
+        onDone: {
+          target: "site",
+          actions: assign({
+            browserContext: (_) => undefined,
+            pageContext: (_) => undefined
+          })
         }
-      },
-      onDone: {
-        target: "site",
-        actions: assign({
-          browserContext: (_) => undefined,
-          pageContext: (_) => undefined
-        })
       }
     }
   }
