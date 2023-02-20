@@ -34,6 +34,14 @@ export async function login(browser: BrowserContext, username: string, password:
     return cookies;
 }
 
+export async function logout(browser: BrowserContext)
+{
+    const page = await browser.newPage();
+    await page.goto("https://ngoaingu24h.vn/tat-ca-khoa-hoc?category=my-course");
+    // @ts-expect-error
+    await page.evaluate(() => onLogout());
+}
+
 async function downloadExam(page: Page, spinner: Ora, output: string)
 {
     const title = await page.$eval(".path-panel-style a.active", el => el.textContent!);
