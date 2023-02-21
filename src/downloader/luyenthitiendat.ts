@@ -139,7 +139,7 @@ export async function download(_: never, token: string, link: string, output: st
 {
     let matches;
     if (matches = (link as string).match(
-        /http:\/\/app\.luyenthitiendat\.vn\/app\/classrooms\/[0-9a-f]{24}\/testings\/(?<id>[0-9a-f]{24})/
+        /https:\/\/app\.luyenthitiendat\.vn\/app\/classrooms\/[0-9a-f]{24}\/testings\/(?<id>[0-9a-f]{24})/
     ))
         return downloadExam(token, matches.groups!["id"], output);
 }
