@@ -7,7 +7,7 @@ import { load } from "cheerio";
 import { execa } from "execa";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ffmpeg, yt_dlp } from "../tools.js";
+import { ffmpeg, yt_dlp, aria2c } from "../tools.js";
 import { sanitizePath } from "./helper/sanitizePath.js";
 
 export const website = "ngochuyenlb.edu.vn";
@@ -120,6 +120,9 @@ async function downloadExam(token: string, id: string, output: string)
             "-P", subdir_videos,
             "-o", `${i + 1}.%(ext)s`,
             "--ffmpeg-location", ffmpeg!,
+            "--compat-options", "no-external-downloader-progress",
+            "--downloader", aria2c,
+            "--downloader-args", "aria2c:-x16 -s16",
             video
         ], {
             stdio: "inherit"
