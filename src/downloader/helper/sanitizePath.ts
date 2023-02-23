@@ -1,1 +1,1 @@
-export const sanitizePath = (s: string) => s.replace(/[/\\?%*:|"<>]/g, '_');
+export const sanitizePath = (s: string) => s.trim().replace(/[/\\?%*:|"<>]/g, '_');
