@@ -46,6 +46,18 @@ type Answer = ApiResponse<{
     video_link: string
 }>
 
+type Lesson = ApiResponse<{
+    lesson: {
+        _id: string,
+        name: string
+    },
+    lessonVideos: Array<{
+        _id: string,
+        name: string,
+        link: string
+    }>
+}>
+
 export async function login(_: never, email: string, password: string)
 {
     const {code, data} = await got.post("https://api.ngochuyenlb.edu.vn/auth/signin", {
@@ -131,11 +143,55 @@ async function downloadExam(token: string, id: string, output: string)
     spinner.succeed("Finished!");
 }
 
+async function downloadLesson(token: string, id: string, output: string)
+{
+    const headers = { Authorization: token };
+    const spinner = ora("Getting lesson details...").start();
+    const { code, data, message } = await got.post("https://api.ngochuyenlb.edu.vn/lesson/preview", {
+        json: { alias: id },
+        headers
+    }).json<Lesson>();
+    if (code !== 200)
+    {
+        spinner.fail("Failed getting lesson details! Error: " + message);
+        return;
+    }
+    const { lessonVideos: videos, lesson: { name: title }} = data;
+
+    const subdir = join(output, sanitizePath(title));
+    await mkdir(subdir, {recursive: true}).catch(() => {});
+    await writeFile(join(subdir, "link.txt"), videos.map(({link}) => link + '\n').join(""));
+
+    spinner.stopAndPersist({
+        text: "Downloading videos using yt-dlp..."
+    });
+    await pMap(videos, ({link, name}, i) => {
+        return execa(yt_dlp, [
+            "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b",
+            "-N", "8",
+            "-P", subdir,
+            "-o", `${sanitizePath(name)}.%(ext)s`,
+            "--ffmpeg-location", ffmpeg!,
+            "--compat-options", "no-external-downloader-progress",
+            "--downloader", aria2c,
+            "--downloader-args", "aria2c:-x16 -s16",
+            link
+        ], {
+            stdio: "inherit"
+        });
+    }, { concurrency: 1, stopOnError: false });
+    spinner.succeed("Finished!");
+}
+
 export async function download(_: never, token: string, link: string, output: string)
 {
     let matches;
-    if (matches = (link as string).match(
+    if (matches = link.match(
         /https:\/\/ngochuyenlb\.edu\.vn\/testing\/(?<id>[0-9a-f]{24})/
     ))
         return downloadExam(token, matches.groups!["id"], output);
+    if (matches = link.match(
+        /https:\/\/ngochuyenlb\.edu\.vn\/lesson\/(?<id>.+)\/?/
+    ))
+        return downloadLesson(token, matches.groups!["id"], output);
 }
