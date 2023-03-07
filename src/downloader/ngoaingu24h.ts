@@ -69,7 +69,16 @@ async function downloadExam(page: Page, spinner: Ora, output: string)
     let count = 0;
 
     await page.$eval("#header", el => el.remove());
-    const questions = await page.$$("div[id^='childQuestion-']");
+
+    let questions: ElementHandle<Element>[] = [];
+    for (const selector of [
+        "div[id^='childQuestion-']",
+        "div[id^='mainViewPanel-']"
+    ])
+    {
+        questions = await page.$$(selector);
+        if (questions.length) break;
+    }
     const total = questions.length;
     for (const question of questions)
     {
