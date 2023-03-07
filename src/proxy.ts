@@ -3,7 +3,7 @@ import ora from "ora";
 
 const cert = await mockttp.generateCACertificate();
 
-const spinner = ora("Starting proxy server...").start();
+// const spinner = ora("Starting proxy server...").start();
 const proxy = mockttp.getLocal({ https: cert });
 proxy.forUnmatchedRequest().thenPassThrough();
 /*
