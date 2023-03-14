@@ -1,6 +1,7 @@
 import got from "got";
 import ora from "ora";
 import pMap from "p-map";
+import sharp from "sharp";
 import { load } from "cheerio";
 import { execa } from "execa";
 import { mkdir } from "node:fs/promises";
@@ -9,6 +10,7 @@ import { ffmpeg, yt_dlp } from "../tools.js";
 import { sanitizePath } from "./helper/sanitizePath.js";
 import { mergeImgVertical } from "./helper/mergeImg.js";
 
+import type { Sharp } from "sharp";
 export const website = "luyenthitiendat.vn";
 
 type ApiResponse<T extends Record<string, unknown>> = { message: string } & ({
@@ -43,7 +45,7 @@ type Exam = ApiResponse<{
 type Answer = ApiResponse<{
     _id: string,
     answer: AnswerChoice,
-    answer_content: string,
+    answer_content: string | null,
     v_id: string,
     video_link: string
 }>
@@ -81,7 +83,7 @@ async function downloadExam(token: string, id: string, output: string)
 
     const subdir_images = join(subdir, "images");
     await mkdir(subdir_images).catch(() => {});
-    const videoLinks = await pMap(questions, async ({_id: id, question}, i) => {
+    const videoLinks = await pMap(questions, async ({_id: id, question, answer}, i) => {
         ++i;
         const questionImgLink = load(question)("img").attr("src")!;
         const questionImg = await got(questionImgLink).buffer();
@@ -94,8 +96,32 @@ async function downloadExam(token: string, id: string, output: string)
             throw new Error("This should never happen, something is really wrong!");
         
         const { video_link, answer_content } = data;
-        const answerImgLink = load(answer_content)("img").attr("src")!;
-        const answerImg = await got(answerImgLink).buffer();
+        let answerImg: Buffer;
+
+        if (answer_content)
+        {
+            const answerImgLink = load(answer_content)("img").attr("src")!;
+            answerImg = await got(answerImgLink).buffer();
+        }
+        else
+        {
+            answerImg = await sharp({
+                text: {
+                    text: `Đáp án: Câu ${answer}`,
+                    font: "Times",
+                    dpi: 200
+                }
+            })
+            .negate()
+            .extend({
+                top: 20,
+                bottom: 20,
+                left: 20,
+                background: "white"
+            })
+            .png()
+            .toBuffer();
+        }
 
         await mergeImgVertical([questionImg, answerImg])
             .then(img => img.toFile(join(subdir_images, `${i}.png`)));

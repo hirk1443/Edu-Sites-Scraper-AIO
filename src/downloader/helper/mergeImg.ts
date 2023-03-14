@@ -6,11 +6,8 @@ export async function mergeImgVertical(images: (Buffer | string | Sharp)[], {
 } = {})
 {
     const newImages = images.map(img => (typeof img === 'string' || Buffer.isBuffer(img)) ? sharp(img) : img);
-    const width = Math.max(...await Promise.all(newImages.map(img => img.metadata().then(
-        ({width}) => width!
-    ))));
     const compositeInput: OverlayOptions[] = [];
-    let height = 0;
+    let width = 0, height = 0;
     for (const img of newImages)
     {
         const { width: imgWidth, height: imgHeight } = await img.metadata();
@@ -19,6 +16,7 @@ export async function mergeImgVertical(images: (Buffer | string | Sharp)[], {
             top: height,
             left: 0
         });
+        width = Math.max(width, imgWidth!);
         height += imgHeight!;
     };
     return sharp({
