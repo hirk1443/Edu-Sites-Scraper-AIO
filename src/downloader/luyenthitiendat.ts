@@ -10,7 +10,6 @@ import { ffmpeg, yt_dlp } from "../tools.js";
 import { sanitizePath } from "./helper/sanitizePath.js";
 import { mergeImgVertical } from "./helper/mergeImg.js";
 
-import type { Sharp } from "sharp";
 export const website = "luyenthitiendat.vn";
 
 type ApiResponse<T extends Record<string, unknown>> = { message: string } & ({
