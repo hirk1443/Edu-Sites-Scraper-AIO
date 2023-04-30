@@ -44,6 +44,16 @@ type Lesson = ApiResponse<{
     }
 }>;
 
+type Course = ApiResponse<{
+    course: {
+        name: string;
+        thematics: Array<{
+            name: string;
+            lessons: Array<{ id: number }>
+        }>
+    }
+}>
+
 type ExamHistory = ApiResponse<{
     data: Array<{
         id: number
@@ -167,70 +177,110 @@ async function getVideoUrl(token: string, id: number)
     return null;
 }
 
+async function downloadLesson(token: string, id: string, output: string)
+{
+    const spinner = ora("Getting lesson details...").start();
+    const headers = { Authorization: "Bearer " + token, Origin: "https://vatlyhadong.vn" };
+    const res = await got(`https://api.vatlyhadong.vn/api/v1/lessons/${id}`,
+        { headers }).json<Lesson>();
+    if ("data" in res)
+    {
+        spinner.stop();
+        const title = res.data.lesson.name;
+        const subdir = join(output, sanitizePath(title));
+        await mkdir(subdir, { recursive: true });
+        if (res.data.lesson.isExamLesson)
+        {
+            const subdirExam = join(subdir, "exams");
+            await mkdir(subdirExam, { recursive: true });
+            await downloadExam(token, id, subdir);
+        }
+        if (res.data.lesson.videos)
+        {
+            const spinner = ora("Downloading documents and videos...").start();
+            const subdirVideos = join(subdir, "videos");
+            const subdirDocuments = join(subdir, "documents");
+            await mkdir(subdirVideos, { recursive: true });
+            await mkdir(subdirDocuments, { recursive: true });
+            await pMap(res.data.lesson.videos, async ({id, name, isDocument, document}) => {
+                if (isDocument)
+                {
+                    const { thematic: {
+                        course:
+                            {
+                                id: course_id
+                            },
+                            id: thematic_id
+                        },
+                        id: lesson_id
+                    } = res.data.lesson;
+                    const file = await got(
+                        "https://vatlyhadong.sgp1.cdn.digitaloceanspaces.com"     +
+                        `/courses/${course_id}/${thematic_id}/${lesson_id}/${id}` +
+                        `/documents/${document}`
+                    ).buffer();
+                    await writeFile(join(subdirDocuments, document), file);
+                }
+                else
+                {
+                    const video = await getVideoUrl(token, id);
+                    if (!video) return;
+                    await execa(yt_dlp, [
+                        "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b",
+                        "-N", "8",
+                        "-P", subdirVideos,
+                        "-o", `${name}.%(ext)s`,
+                        "--ffmpeg-location", ffmpeg!,
+                        video
+                    ]);
+                }
+            }, { concurrency: 5, stopOnError: false });
+            spinner.succeed("Finished");
+        }
+    }
+}
+
+async function downloadCourse(token: string, id: string, output: string)
+{
+    const spinner = ora("Getting lesson details...").start();
+    const headers = { Authorization: "Bearer " + token, Origin: "https://vatlyhadong.vn" };
+    try
+    {
+        const res = await got(`https://api.vatlyhadong.vn/api/v1/courses/${id}`, 
+            { headers }).json<Course>();
+        if ("data" in res)
+        {
+            spinner.stop();
+            const subdirCourse = join(output, sanitizePath(res.data.course.name));
+            await mkdir(subdirCourse, { recursive: true });
+            for (const thematic of res.data.course.thematics)
+            {
+                console.log(`Downloading ${thematic.name}`);
+                const subdirThematic = join(subdirCourse, sanitizePath(thematic.name));
+                await mkdir(subdirThematic, { recursive: true });
+                for (const lesson of thematic.lessons)
+                    await downloadLesson(token, lesson.id.toString(), subdirThematic);
+            }
+        }
+    }
+    catch (e)
+    {
+        spinner.fail("Failed to get course data");
+        throw e;
+    }
+}
+
 export async function download(_: never, token: string, link: string, output: string)
 {
     let matches;
     if (matches = link.match(/https:\/\/vatlyhadong\.vn\/bai-giang\/\d+\/(?<id>\d+)\/.+/))
     {
         const id = matches.groups!["id"];
-        const spinner = ora("Getting lesson details...").start();
-        const headers = { Authorization: "Bearer " + token, Origin: "https://vatlyhadong.vn" };
-        const res = await got(`https://api.vatlyhadong.vn/api/v1/lessons/${id}`,
-            { headers }).json<Lesson>();
-        if ("data" in res)
-        {
-            spinner.stop();
-            const title = res.data.lesson.name;
-            const subdir = join(output, sanitizePath(title));
-            await mkdir(subdir, { recursive: true });
-            if (res.data.lesson.isExamLesson)
-            {
-                const subdirExam = join(subdir, "exams");
-                await mkdir(subdirExam, { recursive: true });
-                await downloadExam(token, id, subdir);
-            }
-            if (res.data.lesson.videos)
-            {
-                const spinner = ora("Downloading documents and videos...").start();
-                const subdirVideos = join(subdir, "videos");
-                const subdirDocuments = join(subdir, "documents");
-                await mkdir(subdirVideos, { recursive: true });
-                await mkdir(subdirDocuments, { recursive: true });
-                await pMap(res.data.lesson.videos, async ({id, name, isDocument, document}) => {
-                    if (isDocument)
-                    {
-                        const { thematic: {
-                            course:
-                                {
-                                    id: course_id
-                                },
-                                id: thematic_id
-                            },
-                            id: lesson_id
-                        } = res.data.lesson;
-                        const file = await got(
-                            "https://vatlyhadong.sgp1.cdn.digitaloceanspaces.com"     +
-                            `/courses/${course_id}/${thematic_id}/${lesson_id}/${id}` +
-                            `/documents/${document}`
-                        ).buffer();
-                        await writeFile(join(subdirDocuments, document), file);
-                    }
-                    else
-                    {
-                        const video = await getVideoUrl(token, id);
-                        if (!video) return;
-                        await execa(yt_dlp, [
-                            "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b",
-                            "-N", "8",
-                            "-P", subdirVideos,
-                            "-o", `${name}.%(ext)s`,
-                            "--ffmpeg-location", ffmpeg!,
-                            video
-                        ]);
-                    }
-                }, { concurrency: 5, stopOnError: false });
-                spinner.succeed("Finished");
-            }
-        }
+        await downloadLesson(token, id, output);
+    }
+    else if (matches = link.match(/https:\/\/vatlyhadong\.vn\/khoa-hoc\/(?<id>\d+)\/.+/))
+    {
+        const id = matches.groups!["id"];
+        await downloadCourse(token, id, output);
     }
 }
