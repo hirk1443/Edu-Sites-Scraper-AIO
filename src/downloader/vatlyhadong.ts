@@ -260,7 +260,6 @@ async function downloadLesson(token: string, id: string, output: string)
             .then(() => spinner.succeed("Finished"))
             .catch((e) => {
                 spinner.fail("Something failed downloading");
-                console.error(e);
                 throw e;
             })
         }
