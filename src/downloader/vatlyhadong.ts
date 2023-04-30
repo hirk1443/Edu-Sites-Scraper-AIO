@@ -275,14 +275,18 @@ async function downloadCourse(token: string, id: string, output: string)
             spinner.stop();
             const subdirCourse = join(output, sanitizePath(res.data.course.name));
             await mkdir(subdirCourse, { recursive: true });
+            let somethingFailed = false;
             for (const thematic of res.data.course.thematics)
             {
                 console.log(`Downloading ${thematic.name}`);
                 const subdirThematic = join(subdirCourse, sanitizePath(thematic.name));
                 await mkdir(subdirThematic, { recursive: true });
                 for (const lesson of thematic.lessons)
-                    await downloadLesson(token, lesson.id.toString(), subdirThematic);
+                    await downloadLesson(token, lesson.id.toString(), subdirThematic)
+                        .catch(() => somethingFailed = true);
             }
+            if (somethingFailed)
+                console.log("Something failed downloading, files might not be complete");
         }
     }
     catch (e)
