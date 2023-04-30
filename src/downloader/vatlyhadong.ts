@@ -256,8 +256,13 @@ async function downloadLesson(token: string, id: string, output: string)
                 spinner.text =
                     "Downloading documents and videos... " + 
                     `(videos: ${videos}/${totalVideos}, documents: ${documents}/${totalDocuments})`;
-            }, { concurrency: 5, stopOnError: false });
-            spinner.succeed("Finished");
+            }, { concurrency: 5, stopOnError: false })
+            .then(() => spinner.succeed("Finished"))
+            .catch((e) => {
+                spinner.fail("Something failed downloading");
+                console.error(e);
+                throw e;
+            })
         }
     }
 }
