@@ -197,11 +197,21 @@ async function downloadLesson(token: string, id: string, output: string)
         }
         if (res.data.lesson.videos)
         {
-            const spinner = ora("Downloading documents and videos...").start();
             const subdirVideos = join(subdir, "videos");
             const subdirDocuments = join(subdir, "documents");
             await mkdir(subdirVideos, { recursive: true });
             await mkdir(subdirDocuments, { recursive: true });
+            let totalVideos = 0, totalDocuments = 0;
+            for (const { isDocument } of res.data.lesson.videos)
+            {
+                if (isDocument)
+                    totalDocuments++;
+                else
+                    totalVideos++;
+            }
+
+            const spinner = ora("Downloading documents and videos...").start();
+            let videos = 0, documents = 0;
             await pMap(res.data.lesson.videos, async ({id, name, isDocument, document}) => {
                 if (isDocument)
                 {
@@ -220,20 +230,32 @@ async function downloadLesson(token: string, id: string, output: string)
                         `/documents/${document}`
                     ).buffer();
                     await writeFile(join(subdirDocuments, document), file);
+                    ++documents;
                 }
                 else
                 {
                     const video = await getVideoUrl(token, id);
                     if (!video) return;
-                    await execa(yt_dlp, [
-                        "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b",
-                        "-N", "8",
-                        "-P", subdirVideos,
-                        "-o", `${name}.%(ext)s`,
-                        "--ffmpeg-location", ffmpeg!,
-                        video
-                    ]);
+                    if (/youtu\.?be/.test(video))
+                    {
+                        await writeFile(join(subdirVideos, sanitizePath(name) + ".txt"), video);
+                    }
+                    else
+                    {
+                        await execa(yt_dlp, [
+                            "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4] / bv*+ba/b",
+                            "-N", "8",
+                            "-P", subdirVideos,
+                            "-o", `${sanitizePath(name)}.%(ext)s`,
+                            "--ffmpeg-location", ffmpeg!,
+                            video
+                        ]);
+                    }
+                    ++videos;
                 }
+                spinner.text =
+                    "Downloading documents and videos... " + 
+                    `(videos: ${videos}/${totalVideos}, documents: ${documents}/${totalDocuments})`;
             }, { concurrency: 5, stopOnError: false });
             spinner.succeed("Finished");
         }
