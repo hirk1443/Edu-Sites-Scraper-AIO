@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { sanitizePath } from "./helper/sanitizePath.js";
 
 import type { Ora } from "ora";
-import { BrowserContext, Page, ElementHandle } from "puppeteer";
+import type { BrowserContext, Page, ElementHandle } from "puppeteer";
 
 export const website = "ngoaingu24h.vn";
 
@@ -52,9 +52,9 @@ async function downloadExam(page: Page, spinner: Ora, output: string)
     const docsInfo = await page.$$eval(".document-item a.view", elems => elems.map(
         el => { return { name: el.textContent!, link: el.href } }
     ));
-    await pMap(docsInfo, async ({ name, link }) => {
+    await pMap(docsInfo, async ({ link }, i) => {
         const content = await got(link).buffer();
-        await writeFile(join(subdir, name), content);
+        await writeFile(join(subdir, `Đề ${i + 1}.pdf`), content);
     }, { concurrency: 5 });
 
     await page.$eval("#preloader", el => el.remove());
