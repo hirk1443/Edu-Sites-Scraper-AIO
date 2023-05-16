@@ -1,9 +1,9 @@
-import { execa } from "execa";
 import got from "got";
-import { zip } from "lodash-es";
 import ora from "ora";
 import pMap from "p-map";
-import QuickLRU from "quick-lru"
+import QuickLRU from "quick-lru";
+import { zip } from "lodash-es";
+import { execa } from "execa";
 import { proxy } from "../proxy.js";
 import { yt_dlp, ffmpeg } from "../tools.js";
 import { mkdir } from "node:fs/promises";
@@ -168,7 +168,7 @@ async function downloadVideo(browser: BrowserContext, link: string, output: stri
     await mkdir(subdir, { recursive: true }).catch(() => {});
 
     spinner.text = "Getting video titles...";
-    const videoTitles = (await page.waitForSelector(".video-right", { timeout: 5000 })
+    const videoTitles = (await page.waitForSelector(".ask-header + div", { timeout: 5000 })
     .then(list => list?.$$eval("div > div > span", els => els.map(el => el.textContent!.trim()))))!;
 
     spinner.text = "Getting video links...";
