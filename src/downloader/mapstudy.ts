@@ -94,9 +94,10 @@ async function downloadExam(token: string, id: string, output: string)
         spinner.text = `Downloading question ${i + 1}/${attempt.data.questions.length}...`;
         const questionImgLink = load(question.name)("img").attr("src")!;
         const questionImg = await got(questionImgLink).buffer();
+        const answer = question.answers.filter(x => x.id === question.answerId).map(x => x.name)[0];
         const answerImg = await sharp({
             text: {
-                text: `Đáp án: ${question.answers.filter(x => x.id === question.answerId).map(x => x.name)}`,
+                text: `Đáp án: ${load(answer).text()}`,
                 font: "Times",
                 dpi: 100
             }
