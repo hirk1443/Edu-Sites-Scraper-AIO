@@ -182,9 +182,18 @@ async function downloadVideo(browser: BrowserContext, link: string, output: stri
     }, { concurrency: 5 }));
     await page.close();
 
-    spinner.text = "Downloading videos using yt-dlp...";
+    spinner.text = "Downloading videos using ffmpeg...";
     let video_finished = 0;
     await pMap(zip(videoTitles, videoLinks), ([title, link]) =>
+        /*
+        execa(ffmpeg!, [
+            "-http_proxy", proxy.url.replace("https", "http"),
+            "-i", link!,
+            "-c", "copy",
+            "-bsf:a", "aac_adtstoasc",
+            `${title}.mp4`
+        ])
+        */
         execa(yt_dlp, [
             "-N", "8",
             "-P", subdir,
@@ -195,7 +204,7 @@ async function downloadVideo(browser: BrowserContext, link: string, output: stri
             link!
         ])
         .then(() =>
-            spinner.text = `Downloading videos using yt-dlp... (${++video_finished}/${videoLinks.length})`
+            spinner.text = `Downloading videos using ffmpeg... (${++video_finished}/${videoLinks.length})`
         ),
     { concurrency: 5 });
     spinner.succeed("Finished!");
