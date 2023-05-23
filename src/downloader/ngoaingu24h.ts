@@ -21,6 +21,21 @@ export async function login(browser: BrowserContext, username: string, password:
     });
     await page.type("#account-input", username);
     await page.type("#password-input", password);
+    await page.evaluate(() => {
+        // @ts-expect-error
+        window.$.ajaxSetup({
+            // @ts-expect-error
+            dataFilter(data) {
+                if (this.url === "/api/login")
+                {
+                    const res = JSON.parse(data);
+                    res.status = 0;
+                    return JSON.stringify(res);
+                }
+                return data;
+            }
+        })
+    });
     await Promise.all([
         page.click(".btn-login-v1"),
         page.waitForNavigation()
@@ -92,6 +107,19 @@ async function downloadExam(page: Page, spinner: Ora, output: string)
     spinner.succeed("Finished!");
 }
 
+async function downloadVideo(page: Page, spinner: Ora, output: string)
+{
+    const title = await page.$eval(".path-panel-style a.active", el => el.textContent!);
+    const subdir = join(output, sanitizePath(title));
+    await mkdir(subdir, { recursive: true }).catch(() => {});
+
+    const link = await page.$eval("img[src-video-js]", el => el.getAttribute("src-video-js")!);
+    spinner.stopAndPersist({
+        text: "Downloading video with yt-dlp..."
+    });
+
+}
+
 export async function download(ctx: BrowserContext, _: never, link: string, output: string)
 {
     const spinner = ora("Loading page...").start();
@@ -100,5 +128,8 @@ export async function download(ctx: BrowserContext, _: never, link: string, outp
     await page.goto(link);
     if (await page.$("#loxogame"))
         await downloadExam(page, spinner, output);
+    if (await page.$("img[src-video-js]"))
+        await downloadVideo(page, spinner, output);
+    spinner.stop();
     await page.close();
 }
