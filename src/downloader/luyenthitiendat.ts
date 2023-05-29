@@ -35,7 +35,7 @@ type Exam = ApiResponse<{
     },
     questions: Array<{
         _id: string,
-        question: string,
+        question: string | null,
         answer: AnswerChoice,
         level: string
     }>
@@ -84,47 +84,48 @@ async function downloadExam(token: string, id: string, output: string)
     await mkdir(subdir_images).catch(() => {});
     const videoLinks = await pMap(questions, async ({_id: id, question, answer}, i) => {
         ++i;
-        const questionImgLink = load(question)("img").attr("src")!;
-        const questionImg = await got(questionImgLink).buffer();
-
         const { code, data } = await got.post("https://api.luyenthitiendat.vn/question/answer", {
             json: { id },
             headers
         }).json<Answer>();
         if (code !== 200)
             throw new Error("This should never happen, something is really wrong!");
-        
         const { video_link, answer_content } = data;
-        let answerImg: Buffer;
 
-        if (answer_content)
+        if (question)
         {
-            const answerImgLink = load(answer_content)("img").attr("src")!;
-            answerImg = await got(answerImgLink).buffer();
-        }
-        else
-        {
-            answerImg = await sharp({
-                text: {
-                    text: `Đáp án: Câu ${answer}`,
-                    font: "Times",
-                    dpi: 200
-                }
-            })
-            .negate()
-            .extend({
-                top: 20,
-                bottom: 20,
-                left: 20,
-                background: "white"
-            })
-            .png()
-            .toBuffer();
-        }
+            const questionImgLink = load(question)("img").attr("src")!;
+            const questionImg = await got(questionImgLink).buffer();
+            let answerImg: Buffer;
 
-        await mergeImgVertical([questionImg, answerImg])
-            .then(img => img.toFile(join(subdir_images, `${i}.png`)));
-        
+            if (answer_content)
+            {
+                const answerImgLink = load(answer_content)("img").attr("src")!;
+                answerImg = await got(answerImgLink).buffer();
+            }
+            else
+            {
+                answerImg = await sharp({
+                    text: {
+                        text: `Đáp án: Câu ${answer}`,
+                        font: "Times",
+                        dpi: 200
+                    }
+                })
+                .negate()
+                .extend({
+                    top: 20,
+                    bottom: 20,
+                    left: 20,
+                    background: "white"
+                })
+                .png()
+                .toBuffer();
+            }
+
+            await mergeImgVertical([questionImg, answerImg])
+                .then(img => img.toFile(join(subdir_images, `${i}.png`)));
+        }
         spinner.text = `Downloading questions... (finished: ${++question_finished}/${questions.length})`
         if (!video_link || video_link === "null") return null;
 
