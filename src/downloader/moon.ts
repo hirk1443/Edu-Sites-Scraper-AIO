@@ -184,7 +184,7 @@ async function downloadVideo(browser: BrowserContext, link: string, output: stri
 
     spinner.text = "Downloading videos using ffmpeg...";
     let video_finished = 0;
-    await pMap(zip(videoTitles, videoLinks), ([title, link]) =>
+    await pMap(zip(videoTitles, videoLinks), ([title, link], i) =>
         /*
         execa(ffmpeg!, [
             "-http_proxy", proxy.url.replace("https", "http"),
@@ -197,7 +197,7 @@ async function downloadVideo(browser: BrowserContext, link: string, output: stri
         execa(yt_dlp, [
             "-N", "8",
             "-P", subdir,
-            "-o", `${title}.%(ext)s`,
+            "-o", `${i + 1}.%(ext)s`,
             "--ffmpeg-location", ffmpeg!,
             "--proxy", proxy.url,
             "--no-check-certificates",
