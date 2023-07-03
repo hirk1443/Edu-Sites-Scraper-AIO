@@ -50,7 +50,7 @@ const machine = createMachine<MachineContext>({
         src: () => {
           const spinner = ora("Starting Puppeteer...").start();
           puppeteer.use(StealthPlugin());
-          const browser = puppeteer.launch({ headless: !process.env.PUPPETEER_NO_HEADLESS });
+          const browser = puppeteer.launch({ headless: false });
           browser
             .then(() => spinner.succeed("Started Puppeteer!"))
             .catch(() => spinner.fail("Failed to start Puppeteer!"));
