@@ -1,4 +1,5 @@
-import puppeteer, { Browser } from 'puppeteer';
+import puppeteer from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import Conf from 'conf';
 import ora from 'ora';
 import { globby } from 'globby';
@@ -7,7 +8,7 @@ import prompts from 'prompts';
 import process from 'node:process';
 import { proxy } from "./proxy.js";
 
-import { BrowserContext } from "puppeteer";
+import type { Browser, BrowserContext } from "puppeteer";
 
 type Downloader = {
   website: string;
@@ -48,6 +49,7 @@ const machine = createMachine<MachineContext>({
         id: "initPuppeteer",
         src: () => {
           const spinner = ora("Starting Puppeteer...").start();
+          puppeteer.use(StealthPlugin());
           const browser = puppeteer.launch({ headless: !process.env.PUPPETEER_NO_HEADLESS });
           browser
             .then(() => spinner.succeed("Started Puppeteer!"))
