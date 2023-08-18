@@ -71,7 +71,7 @@ async function downloadExam(browser: BrowserContext, link: string, output: strin
     .then(() => page.reload({ waitUntil: "networkidle2" }))
     .catch(() => {});
 
-    await page.waitForSelector(".btn-info:last-of-type", { timeout: 3000 }).then(el => el?.click());
+    await page.waitForSelector(".btn-sm:last-of-type", { timeout: 3000 }).then(el => el?.click());
     await page.waitForNetworkIdle();
     const title = await page.$eval(".ask-header p", el => el.textContent!);
     const subdir = join(output, sanitizePath(title!.trim()));
@@ -79,7 +79,7 @@ async function downloadExam(browser: BrowserContext, link: string, output: strin
     
     const audioLinks = await page.$$eval("div[id^='icecast_']", elems => elems.map(
         // @ts-expect-error
-        el => window.flowplayer(el).conf.sources[0].src as string
+        el => window.flowplayer(el).conf.clip.sources[0].src as string
     ));
 
     if (audioLinks.length)
@@ -98,50 +98,74 @@ async function downloadExam(browser: BrowserContext, link: string, output: strin
         { concurrency: 5 });
     }
 
+    await page.$eval(
+        "div[style='position:fixed;bottom:0;height:45px;left:0;width:65%; background-color:#1b75b6'",
+        el => el.remove()
+    ).catch(() => {});
+
     spinner.text = "Capturing answer keys...";
     await page.waitForSelector(".table-bordered", { timeout: 3000 })
     .then(elem => elem?.screenshot({ path: join(subdir, "answerKey.png") }))
     .catch(() => {});
-    const sections = await page.$$("section[id^='Key_']");
-    await page.$$eval("table tr td[align='right'] a", elems => elems.map(el => el.click()));
-    
-    spinner.text = "Removing comments...";
-    await (async () => {
-        let handle;
-        while (handle = await page.waitForSelector("div[style='padding:15px;background-color:#e6eaef;']", {
-            timeout: 1000
-        }).catch(() => null))
-            await handle.evaluate(el => el.remove());
-    })()
-
-    for (let [i, section] of sections.entries())
+    let sections;
+    if ((sections = await page.$$("section[id^='Key_']")).length)
     {
-        ++i;
-        spinner.text = `Capturing question ${i}/${sections.length} (${(i * 100/sections.length).toFixed(0)}%)...`;
-        const handles = [];
-
-        const question = await section.evaluateHandle(e => e.nextElementSibling!);
-        handles.push(question);
-
-        const choices = await question.evaluateHandle(e => e.nextElementSibling!);
-        handles.push(choices);
-
-        const answer = await choices.evaluateHandle(e => e.nextElementSibling!);
-        handles.push(answer);
-
-        const maybeExplain = await answer.evaluateHandle(e => e.nextElementSibling!);
-        if (await maybeExplain.evaluate(e => e.classList.contains("noselect")))
-            handles.push(maybeExplain);
-
-        const imgList = [];
-        for (const handle of handles)
-            imgList.push(await handle.screenshot());
-        await mergeImgVertical(imgList)
-            .then(img => img.toFile(join(subdir, `${i}.png`)));
+        await page.$$eval("table tr td[align='right'] a", elems => elems.map(el => el.click()));
         
-        await Promise.all(handles.map(handle => handle.evaluate(el => el.remove())));
+        spinner.text = "Removing comments...";
+        await (async () => {
+            let handle;
+            while (handle = await page.waitForSelector("div[style='padding:15px;background-color:#e6eaef;']", {
+                timeout: 1000
+            }).catch(() => null))
+                await handle.evaluate(el => el.remove());
+        })()
+
+        for (let [i, section] of sections.entries())
+        {
+            ++i;
+            spinner.text = `Capturing question ${i}/${sections.length} (${(i * 100/sections.length).toFixed(0)}%)...`;
+            const handles = [];
+
+            const question = await section.evaluateHandle(e => e.nextElementSibling!);
+            handles.push(question);
+
+            const choices = await question.evaluateHandle(e => e.nextElementSibling!);
+            handles.push(choices);
+
+            const answer = await choices.evaluateHandle(e => e.nextElementSibling!);
+            handles.push(answer);
+
+            const maybeExplain = await answer.evaluateHandle(e => e.nextElementSibling!);
+            if (await maybeExplain.evaluate(e => e.classList.contains("noselect")))
+                handles.push(maybeExplain);
+
+            const imgList = [];
+            for (const handle of handles)
+                imgList.push(await handle.screenshot());
+            await mergeImgVertical(imgList)
+                .then(img => img.toFile(join(subdir, `${i}.png`)));
+            
+            await Promise.all(handles.map(handle => handle.evaluate(el => el.remove())));
+        }
+        spinner.succeed(`Finished capturing ${sections.length} questions!`);
     }
-    spinner.succeed(`Finished capturing ${sections.length} questions!`);
+    else if ((sections = await page.$$("div[style='margin-top:20PX']")).length)
+    {
+        for (let [i, section] of sections.entries())
+        {
+            ++i;
+            spinner.text = `Capturing question ${i}/${sections.length} (${(i * 100/sections.length).toFixed(0)}%)...`;
+            await section.screenshot({
+                path: join(subdir, `${i}.png`)
+            })
+        }
+        spinner.succeed(`Finished capturing ${sections.length} questions!`);
+    }
+    else
+    {
+        spinner.fail("No questions captured!")
+    }
     await page.close();
 }
 
