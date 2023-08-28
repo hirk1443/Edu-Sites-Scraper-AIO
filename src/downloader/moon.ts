@@ -91,6 +91,7 @@ async function downloadExam(browser: BrowserContext, link: string, output: strin
                 "-N", "8",
                 "-P", subdir,
                 "-o", `audio${i + 1}.%(ext)s`,
+                "--ffmpeg-location", ffmpeg!,
                 "--extract-audio",
                 link!
             ])
