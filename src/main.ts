@@ -50,7 +50,7 @@ const machine = createMachine<MachineContext>({
         src: () => {
           const spinner = ora("Starting Puppeteer...").start();
           puppeteer.use(StealthPlugin());
-          const browser = puppeteer.launch({ headless: false });
+          const browser = puppeteer.launch({ headless: true });
           browser
             .then(() => spinner.succeed("Started Puppeteer!"))
             .catch(() => spinner.fail("Failed to start Puppeteer!"));
@@ -126,7 +126,7 @@ const machine = createMachine<MachineContext>({
           if (username === undefined || password === undefined)
             throw new Error("User canceled");
           const spinner = ora("Logging in...").start();
-          browserContext = await browser?.createIncognitoBrowserContext();
+          browserContext = await browser?.createBrowserContext();
           const result = await downloader!.login(browserContext!, username, password);
           if (!result) {
             spinner.fail("Login failed! Check your credentials");
