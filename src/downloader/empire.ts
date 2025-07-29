@@ -24,7 +24,16 @@ type AuthResult = {
 };
 
 export async function login(_: never, username: string, password: string) {
-  const json = { email: username, password };
+  const json = {
+    email: username,
+    password,
+    device: {
+      deviceId: "1391468667",
+      platform: "web",
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    },
+  };
 
   try {
     const { accessToken } = await got
@@ -93,8 +102,7 @@ async function downloadVideo(token: string, id: string, output: string) {
       const { choices } = await prompts({
         type: "multiselect",
         name: "choices",
-        message:
-          "Select videos to download",
+        message: "Select videos to download",
         choices: videoResources.map((v, i) => ({
           title: `${i + 1}. ${v.title}`,
           value: v,
