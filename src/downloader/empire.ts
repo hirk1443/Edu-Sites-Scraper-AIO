@@ -177,7 +177,5 @@ export async function download(
   link: string,
   output: string
 ) {
-  let matches;
-  if ((matches = (link as string).match(/https:\/\/empire\.edu\.vn\/khoa-hoc/)))
-    return downloadVideo(token, link, output);
+  return downloadVideo(token, link, output);
 }
