@@ -1,0 +1,17 @@
+---
+geometry:
+- left = 30mm
+- right = 15mm
+- top = 20mm
+- bottom = 20mm
+mainfont: Times New Roman
+fontsize: 14pt
+documentclass: extarticle
+header-includes: |
+  \usepackage{booktabs}
+  \usepackage{longtable}
+  \usepackage{array}
+  \usepackage{multirow}
+  \usepackage{enumitem}
+  \setlist[itemize]{label=, leftmargin=*}
+---
