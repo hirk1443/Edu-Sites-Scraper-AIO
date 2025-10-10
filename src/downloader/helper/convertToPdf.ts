@@ -5,12 +5,13 @@ import path from "path";
 
 function normalizeMathContent(content: string): string {
   if (!content) return "";
-  // Chuyển các định dạng \[...\] và $[...]$ thành $$...$$ (display math)
-  let result = content.replace(/\\\[(.*?)\\\]/g, "$$$$$1$$$$");
-  result = result.replace(/\$\[(.*?)\]/g, "$$$$$1$$$$");
+  
+  let result = content.replace(/\\\[(.*?)\\\]/g, '$$$$$1$$$$');
+  result = result.replace(/\$\[(.*?)\]/g, '$$$$$1$$$$');
 
-  // Chuyển các ký tự \$ thành $
-  result = result.replace(/\\\$/g, "$");
+  result = result.replace(/\\\$/g, '$');
+  
+  result = result.replace(/\\2/g, '^{\\circ}C');
 
   return result;
 }
@@ -42,7 +43,7 @@ export function convertExamDataToHtml(examData: ExamData): string {
 
       if (imageUrls.length > 0) {
         imageUrls.forEach((url) => {
-          html += `<img src="${url}" style="max-width: 50%; height: auto; display: block; margin: 10px auto;" />`;
+          html += `<img src="${url}" style="max-width: 50%; height: auto; display: block; margin: 10px auto;" /><br>`;
         });
       }
       html += `<hr />`;

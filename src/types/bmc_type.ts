@@ -73,7 +73,6 @@ export interface MultipleAnswerQuestion extends BaseQuestion {
   contentC2?: string;
   contentC3?: string;
   contentC4?: string;
-
 }
 
 /**
