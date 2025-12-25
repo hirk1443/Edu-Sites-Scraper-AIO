@@ -11,6 +11,7 @@ import {
   MasterExam,
   ExamInformation,
   ExamApiResponse,
+  LogoutResponse,
 } from "../types/bmc_type.js";
 import { log } from "node:console";
 import { pandocMetadata } from "../tools.js";
@@ -78,7 +79,19 @@ export async function login(_: never, username: string, password: string) {
   }
 }
 
-export async function logout() {}
+export async function logout() {
+  try {
+    const responseData = await apiClient.delete(`${baseApiUrl}/auth/sessions`);
+    const authResponse = responseData.body as unknown as LogoutResponse;
+    if (authResponse.success) {
+      authourization = "";
+      return true;
+    }
+  } catch (error: any) {
+    log(error);
+    return null;
+  }
+}
 
 export async function download(
   _: never,
@@ -122,9 +135,6 @@ async function fetchExam(token: string, link: string, output: string) {
         spinner.info("No exam selected. Exiting.");
         return;
       }
-
-      const total = choices.length;
-
       await pMap(
         choices as ExamInformation[],
         async (examInfo: ExamInformation, idx: number) => {

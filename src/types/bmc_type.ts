@@ -9,6 +9,11 @@ export interface AuthResponse {
   avatar: string;
 }
 
+export interface LogoutResponse {
+  message: string;
+  success: boolean;
+}
+
 export interface MasterExam {
   data: ExamInformation[];
   assessment: {
