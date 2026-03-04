@@ -25,15 +25,15 @@ export const website = "bmc.io.vn";
 const baseApiUrl = "https://api.bmc.io.vn/api/v2";
 const SECRET_KEY = "lmf@123456789";
 
-let authourization = "";
+let authorization = "";
 
 const apiClient: Got = got.extend({
   responseType: "json",
   hooks: {
     beforeRequest: [
       (options) => {
-        if (authourization) {
-          options.headers["Authorization"] = `Bearer ${authourization}`;
+        if (authorization) {
+          options.headers["Authorization"] = `Bearer ${authorization}`;
         }
       },
     ],
@@ -63,7 +63,7 @@ const apiClient: Got = got.extend({
 export async function login(_: never, username: string, password: string) {
   const json = {
     email: username,
-    password,
+    password: password,
   };
 
   try {
@@ -71,10 +71,27 @@ export async function login(_: never, username: string, password: string) {
       json,
     });
     const authResponse = responseData.body as unknown as AuthResponse;
-    authourization = authResponse.token;
-    return authourization;
+    authorization = authResponse.token;
+    return authorization;
   } catch (error: any) {
-    log(error);
+    if (error.response) {
+      console.error(error.response.body);
+    }
+    log(error.message);
+    return null;
+  }
+}
+
+export async function loginUsingToken(_: never, token: string) {
+  try {
+    authorization = token;
+    console.log(`Logged in with token ${authorization}`);
+    return authorization;
+  } catch (error: any) {
+    if (error.response) {
+      console.error(error.response.body);
+    }
+    log(error.message);
     return null;
   }
 }
@@ -84,7 +101,7 @@ export async function logout() {
     const responseData = await apiClient.delete(`${baseApiUrl}/auth/sessions`);
     const authResponse = responseData.body as unknown as LogoutResponse;
     if (authResponse.success) {
-      authourization = "";
+      authorization = "";
       return true;
     }
   } catch (error: any) {
@@ -97,7 +114,7 @@ export async function download(
   _: never,
   token: string,
   link: string,
-  output: string
+  output: string,
 ) {
   return fetchExam(token, link, output);
 }
@@ -113,7 +130,7 @@ async function fetchExam(token: string, link: string, output: string) {
     console.log(examId);
     try {
       const responseData = await apiClient.get(
-        `${baseApiUrl}/exam/by-assessmentId/${examId}`
+        `${baseApiUrl}/exam/by-assessmentId/${examId}`,
       );
 
       const examMaster = responseData.body as unknown as MasterExam;
@@ -152,13 +169,13 @@ async function fetchExam(token: string, link: string, output: string) {
                 response = await apiClient.get(
                   `${baseApiUrl}/exam-result/by-subject/${
                     examMaster.assessment._id
-                  }?subject=${encodeURIComponent(examInfo.subject)}`
+                  }?subject=${encodeURIComponent(examInfo.subject)}`,
                 );
                 success = true;
                 spinner.succeed(`Fetched exam: ${examInfo.title.text}`);
               } catch (error) {
                 spinner.warn(
-                  `Attempt ${attempts}: Exam '${examInfo.title.text}' not completed, submitting...`
+                  `Attempt ${attempts}: Exam '${examInfo.title.text}' not completed, submitting...`,
                 );
                 if (attempts < maxAttempts) {
                   const maxTimeInMs = examInfo.time * 60 * 1000;
@@ -174,17 +191,17 @@ async function fetchExam(token: string, link: string, output: string) {
                         access: examInfo.access,
                         examCompledTime: completedTime,
                       },
-                    }
+                    },
                   );
                   spinner.info(
-                    `Submitted '${examInfo.title.text}', retrying fetch...`
+                    `Submitted '${examInfo.title.text}', retrying fetch...`,
                   );
                 }
               }
             }
             if (!response) {
               spinner.fail(
-                `Failed to fetch '${examInfo.title.text}' after all attempts.`
+                `Failed to fetch '${examInfo.title.text}' after all attempts.`,
               );
               return;
             }
@@ -204,15 +221,15 @@ async function fetchExam(token: string, link: string, output: string) {
             await generatePdf(
               answerKeyHtml,
               answerKeyOutputPath,
-              pandocMetadata
+              pandocMetadata,
             );
           } catch (error) {
             spinner.fail(
-              `An unexpected error occurred with exam: ${examInfo.title.text}`
+              `An unexpected error occurred with exam: ${examInfo.title.text}`,
             );
             log(error);
           }
-        }
+        },
       );
       return;
     } catch (error) {

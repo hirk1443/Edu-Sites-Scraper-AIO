@@ -1,28 +1,42 @@
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import Conf from 'conf';
-import ora from 'ora';
-import { globby } from 'globby';
-import { createMachine, interpret, assign, actions } from 'xstate';
-import prompts from 'prompts';
-import process from 'node:process';
+import Conf from "conf";
+import ora from "ora";
+import { globby } from "globby";
+import { createMachine, interpret, assign, actions } from "xstate";
+import prompts from "prompts";
+import process from "node:process";
 import { proxy } from "./proxy.js";
 
 import type { Browser, BrowserContext } from "puppeteer";
+import { download, login } from "./downloader/bmc.js";
 
 type Downloader = {
   website: string;
-  login: (ctx: BrowserContext, username: string, password: string) => Promise<unknown>;
+  login: (
+    ctx: BrowserContext,
+    username: string,
+    password: string,
+  ) => Promise<unknown>;
+  loginUsingToken: (
+    ctx: BrowserContext,
+    token: string,
+  ) => Promise<unknown>;
   logout: (ctx: BrowserContext, pageCtx: unknown) => Promise<void>;
-  download: (ctx: BrowserContext, pageCtx: unknown, link: string, output: string) => Promise<void>;
+  download: (
+    ctx: BrowserContext,
+    pageCtx: unknown,
+    link: string,
+    output: string,
+  ) => Promise<void>;
 };
 
 const loadingSpinner = ora("Loading downloaders...").start();
 const filePath = await globby("./downloader/*.js", {
-  cwd: new URL(".", import.meta.url)
+  cwd: new URL(".", import.meta.url),
 });
 const downloaders: Downloader[] = await Promise.all(
-  filePath.map(path => import(new URL(path, import.meta.url).toString()))
+  filePath.map((path) => import(new URL(path, import.meta.url).toString())),
 );
 loadingSpinner.succeed("Loaded downloaders!");
 
@@ -37,6 +51,12 @@ type MachineContext = Partial<{
   browserContext: BrowserContext;
   pageContext: unknown;
 }>;
+
+type SiteSelectionResult = {
+  confPrefix: string;
+  downloader: Downloader;
+  loginUsingAuthorization: boolean;
+};
 
 const machine = createMachine<MachineContext>({
   predictableActionArguments: true,
@@ -59,17 +79,19 @@ const machine = createMachine<MachineContext>({
         onDone: {
           target: "site",
           actions: assign({
-            browser: (_, event) => { return event.data; }
-          })
-        }
-      }
+            browser: (_, event) => {
+              return event.data;
+            },
+          }),
+        },
+      },
     },
     exit: {
       type: "final",
       entry: actions.log("Goodbye!"),
       invoke: {
-        src: (context) => Promise.all([proxy.stop(), context.browser!.close()])
-      }
+        src: (context) => Promise.all([proxy.stop(), context.browser!.close()]),
+      },
     },
     site: {
       invoke: {
@@ -79,28 +101,46 @@ const machine = createMachine<MachineContext>({
             type: "select",
             name: "choice",
             message: "Select website",
-            choices: downloaders.map(elem => ({ title: elem.website }))
+            choices: downloaders.map((elem, index) => ({
+              title: elem.website,
+              value: index,
+            })),
           });
           if (choice === undefined) throw new Error("User canceled");
+          const selectedDownloader = downloaders[choice];
+          const selectedWebsite = selectedDownloader.website
+            .trim()
+            .toLowerCase();
           return {
-            confPrefix: downloaders[choice].website.split(".")[0],
-            downloader: downloaders[choice],
-          };
+            confPrefix: selectedDownloader.website.split(".")[0],
+            downloader: selectedDownloader,
+            loginUsingAuthorization: selectedWebsite === "bmc.io.vn",
+          } as SiteSelectionResult;
         },
-        onDone: {
-          target: "login",
-          actions: assign({
-            confPrefix: (_, event) => event.data.confPrefix,
-            downloader: (_, event) => event.data.downloader
-          })
-        },
+        onDone: [
+          {
+            cond: (_, event) => event.data.loginUsingAuthorization,
+            target: "loginUsingAuthorization",
+            actions: assign({
+              confPrefix: (_, event) => event.data.confPrefix,
+              downloader: (_, event) => event.data.downloader,
+            }),
+          },
+          {
+            target: "login",
+            actions: assign({
+              confPrefix: (_, event) => event.data.confPrefix,
+              downloader: (_, event) => event.data.downloader,
+            }),
+          },
+        ],
         onError: {
           target: "exit",
           actions: assign({
             confPrefix: (_) => undefined,
-            downloader: (_) => undefined
-          })
-        }
+            downloader: (_) => undefined,
+          }),
+        },
       },
     },
     login: {
@@ -114,101 +154,178 @@ const machine = createMachine<MachineContext>({
               type: "text",
               name: "username",
               message: "Username",
-              initial: config.get(`${confPrefix}.username`) as string
+              initial: config.get(`${confPrefix}.username`) as string,
             },
             {
               type: "password",
               name: "password",
               message: "Password",
-              initial: config.get(`${confPrefix}.password`) as string
-            }
+              initial: config.get(`${confPrefix}.password`) as string,
+            },
           ]);
           if (username === undefined || password === undefined)
             throw new Error("User canceled");
           const spinner = ora("Logging in...").start();
           browserContext = await browser?.createBrowserContext();
-          const result = await downloader!.login(browserContext!, username, password);
+          const result = await downloader!.login(
+            browserContext!,
+            username,
+            password,
+          );
           if (!result) {
             spinner.fail("Login failed! Check your credentials");
             throw new Error("Login failed");
-          }
-          else {
+          } else {
             spinner.succeed("Login success!");
             config.set(`${confPrefix}.username`, username);
             config.set(`${confPrefix}.password`, password);
             return {
               browserContext,
-              pageContext: result
-            }
+              pageContext: result,
+            };
           }
         },
         onDone: {
           target: "download",
           actions: assign({
             browserContext: (_, event) => event.data.browserContext,
-            pageContext: (_, event) => event.data.pageContext
-          })
+            pageContext: (_, event) => event.data.pageContext,
+          }),
         },
         onError: {
           actions: [
             assign({
               browserContext: (_) => undefined,
-              pageContext: (_) => undefined
+              pageContext: (_) => undefined,
             }),
             actions.choose([
               {
                 cond: (_, event) => event.data.message === "Login failed",
-                actions: actions.send("FAILED")
+                actions: actions.send("FAILED"),
               },
               {
                 cond: (_, event) => event.data.message === "User canceled",
-                actions: actions.send("CANCELED")
-              }
-            ])
-          ]
-        }
+                actions: actions.send("CANCELED"),
+              },
+            ]),
+          ],
+        },
+      },
+      on: {
+        FAILED: { target: "loginUsingAuthorization" },
+        CANCELED: { target: "site" },
+      },
+    },
+
+    loginUsingAuthorization: {
+      invoke: {
+        id: "loginUsingAuthorization",
+        src: async (context) => {
+          let { browser, browserContext, confPrefix, downloader } = context;
+          await browserContext?.close();
+          const { token } = await prompts([
+            {
+              type: "text",
+              name: "token",
+              message: "Token",
+              initial: config.get(`${confPrefix}.token`) as string,
+            },
+          
+          ]);
+          if (token === undefined )
+            throw new Error("User canceled");
+          const spinner = ora("Logging in...").start();
+          browserContext = await browser?.createBrowserContext();
+          const result = await downloader!.loginUsingToken(
+            browserContext!,
+            token,
+
+          );
+          if (!result) {
+            spinner.fail("Login failed! Check your credentials");
+            throw new Error("Login failed");
+          } else {
+            spinner.succeed("Login success!");
+            config.set(`${confPrefix}.token`, token);
+            return {
+              browserContext,
+              pageContext: result,
+            };
+          }
+        },
+        onDone: {
+          target: "download",
+          actions: assign({
+            browserContext: (_, event) => event.data.browserContext,
+            pageContext: (_, event) => event.data.pageContext,
+          }),
+        },
+        onError: {
+          actions: [
+            assign({
+              browserContext: (_) => undefined,
+              pageContext: (_) => undefined,
+            }),
+            actions.choose([
+              {
+                cond: (_, event) => event.data.message === "Login failed",
+                actions: actions.send("FAILED"),
+              },
+              {
+                cond: (_, event) => event.data.message === "User canceled",
+                actions: actions.send("CANCELED"),
+              },
+            ]),
+          ],
+        },
       },
       on: {
         FAILED: { target: "login" },
         CANCELED: { target: "site" },
-      }
+      },
     },
+
     download: {
       invoke: {
         id: "download",
         src: async (context) => {
-          const { browserContext, pageContext, confPrefix, downloader } = context;
+          const { browserContext, pageContext, confPrefix, downloader } =
+            context;
           const { link, output } = await prompts([
             {
-                type: "text",
-                name: "link",
-                message: "Link",
+              type: "text",
+              name: "link",
+              message: "Link",
             },
             {
-                type: "text",
-                name: "output",
-                message: "Output folder",
-                initial: config.get(`${confPrefix}.output`) as string
-            }
+              type: "text",
+              name: "output",
+              message: "Output folder",
+              initial: config.get(`${confPrefix}.output`) as string,
+            },
           ]);
           if (link === undefined || output === undefined)
             throw new Error("User canceled");
           config.set(`${confPrefix}.output`, output);
-          try
-          {
-            await downloader!.download(browserContext!, pageContext, link, output);
+          try {
+            await downloader!.download(
+              browserContext!,
+              pageContext,
+              link,
+              output,
+            );
             ora().start().succeed("Download finished!");
-          }
-          catch (e)
-          {
-            ora().start().fail("Download failed! You might need to login again");
+          } catch (e) {
+            ora()
+              .start()
+              .fail("Download failed! You might need to login again");
             console.log(e);
             throw e;
           }
         },
         onDone: "download",
-        onError: "logout"
-      }
+        onError: "logout",
+      },
     },
     logout: {
       invoke: {
@@ -216,7 +333,9 @@ const machine = createMachine<MachineContext>({
         src: async (context) => {
           const { browserContext, pageContext, downloader } = context;
           const spinner = ora("Logging out...").start();
-          await downloader!.logout(browserContext!, pageContext).catch(() => {});
+          await downloader!
+            .logout(browserContext!, pageContext)
+            .catch(() => {});
           spinner.succeed("Logged out!");
           await browserContext!.close();
         },
@@ -224,12 +343,12 @@ const machine = createMachine<MachineContext>({
           target: "site",
           actions: assign({
             browserContext: (_) => undefined,
-            pageContext: (_) => undefined
-          })
-        }
-      }
-    }
-  }
+            pageContext: (_) => undefined,
+          }),
+        },
+      },
+    },
+  },
 });
 
 const service = interpret(machine);
