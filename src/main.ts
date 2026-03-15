@@ -5,11 +5,10 @@ import ora from "ora";
 import { globby } from "globby";
 import { createMachine, interpret, assign, actions } from "xstate";
 import prompts from "prompts";
-import process from "node:process";
+
 import { proxy } from "./proxy.js";
 
 import type { Browser, BrowserContext } from "puppeteer";
-import { download, login } from "./downloader/bmc.js";
 
 type Downloader = {
   website: string;

@@ -1,8 +1,7 @@
 import got, { Got, Response } from "got";
 import CryptoJS from "crypto-js";
 import ora from "ora";
-import prompts from "prompts";
-import pMap from "p-map";
+import fs from "fs/promises";
 import path from "path";
 
 import {
@@ -23,7 +22,7 @@ import {
 
 export const website = "bmc.io.vn";
 const baseApiUrl = "https://api.bmc.io.vn/api/v2";
-const SECRET_KEY = "lmf@123456789";
+const SECRET_KEY = "69affa98f9ab8efffd759dbd";
 
 let authorization = "";
 
@@ -122,120 +121,29 @@ export async function download(
 async function fetchExam(token: string, link: string, output: string) {
   const spinner = ora("Getting exam details...").start();
 
-  const regex = /exams\/([a-z0-9]+)/;
-  const match = link.match(regex);
+  try {
+    const data = await fs.readFile("src\\downloader\\helper\\encrypted.txt", "utf8");
+    const examMaster = (await decryptData(data)) as unknown as ExamApiResponse;
+    spinner.info("Processing exam...");
 
-  if (match) {
-    const examId = match[1];
-    console.log(examId);
-    try {
-      const responseData = await apiClient.get(
-        `${baseApiUrl}/exam/by-assessmentId/${examId}`,
-      );
+    const examApiResponse = examMaster;
+    const examQnA = examApiResponse.data.examData;
+    const outputDir = path.dirname(output);
 
-      const examMaster = responseData.body as unknown as MasterExam;
-      spinner.info("Processing exam: " + examMaster.assessment.title.text);
-      const examDetails = examMaster.data;
+    const pdfFileName = `ĐỀ THI.pdf`;
+    const pdfOutputPath = path.join(outputDir, pdfFileName);
+    const examHtml = convertExamDataToHtml(examQnA);
+    await generatePdf(examHtml, pdfOutputPath, pandocMetadata);
 
-      const { choices } = await prompts({
-        type: "multiselect",
-        name: "choices",
-        message: "Select exam to download",
-        choices: examDetails.map((v, i) => ({
-          title: `${i + 1}. ${v.title.text}`,
-          value: v,
-        })),
-        hint: "- Space to select. Enter to start download.",
-      });
+    const answerKeyFileName = `ĐÁP_ÁN.pdf`;
+    const answerKeyOutputPath = path.join(outputDir, answerKeyFileName);
+    const answerKeyHtml = convertAnswersToHtml(examQnA);
+    await generatePdf(answerKeyHtml, answerKeyOutputPath, pandocMetadata);
 
-      if (!choices || choices.length === 0) {
-        spinner.info("No exam selected. Exiting.");
-        return;
-      }
-      await pMap(
-        choices as ExamInformation[],
-        async (examInfo: ExamInformation, idx: number) => {
-          // Bọc toàn bộ logic trong một try...catch lớn
-          try {
-            let success = false;
-            let attempts = 0;
-            const maxAttempts = 2;
-            let response = null;
-
-            // Vòng lặp retry để fetch dữ liệu
-            while (!success && attempts < maxAttempts) {
-              attempts++;
-              try {
-                response = await apiClient.get(
-                  `${baseApiUrl}/exam-result/by-subject/${
-                    examMaster.assessment._id
-                  }?subject=${encodeURIComponent(examInfo.subject)}`,
-                );
-                success = true;
-                spinner.succeed(`Fetched exam: ${examInfo.title.text}`);
-              } catch (error) {
-                spinner.warn(
-                  `Attempt ${attempts}: Exam '${examInfo.title.text}' not completed, submitting...`,
-                );
-                if (attempts < maxAttempts) {
-                  const maxTimeInMs = examInfo.time * 60 * 1000;
-                  const randomDeductionInMs = Math.floor(Math.random() * 30000);
-                  const completedTime = maxTimeInMs - randomDeductionInMs;
-
-                  await apiClient.post(
-                    `${baseApiUrl}/exam-result/submit-test/${examInfo._id}`,
-                    {
-                      json: {
-                        assessmentId: examMaster.assessment._id,
-                        examId: examInfo._id,
-                        access: examInfo.access,
-                        examCompledTime: completedTime,
-                      },
-                    },
-                  );
-                  spinner.info(
-                    `Submitted '${examInfo.title.text}', retrying fetch...`,
-                  );
-                }
-              }
-            }
-            if (!response) {
-              spinner.fail(
-                `Failed to fetch '${examInfo.title.text}' after all attempts.`,
-              );
-              return;
-            }
-
-            const examApiResponse = response.body as unknown as ExamApiResponse;
-            const examQnA = examApiResponse.data.examData;
-            const outputDir = path.dirname(output);
-
-            const pdfFileName = `${examInfo.title.text}.pdf`;
-            const pdfOutputPath = path.join(outputDir, pdfFileName);
-            const examHtml = convertExamDataToHtml(examQnA);
-            await generatePdf(examHtml, pdfOutputPath, pandocMetadata);
-
-            const answerKeyFileName = `${examInfo.title.text}_ĐÁP_ÁN.pdf`;
-            const answerKeyOutputPath = path.join(outputDir, answerKeyFileName);
-            const answerKeyHtml = convertAnswersToHtml(examQnA);
-            await generatePdf(
-              answerKeyHtml,
-              answerKeyOutputPath,
-              pandocMetadata,
-            );
-          } catch (error) {
-            spinner.fail(
-              `An unexpected error occurred with exam: ${examInfo.title.text}`,
-            );
-            log(error);
-          }
-        },
-      );
-      return;
-    } catch (error) {
-      spinner.fail("An error occurred during the process.");
-      console.error(error);
-    }
+    return;
+  } catch (error) {
+    spinner.fail("An error occurred during the process.");
+    console.error(error);
   }
 }
 
